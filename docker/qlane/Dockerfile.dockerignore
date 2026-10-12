@@ -1,0 +1,10 @@
+# Build context for docker/qlane/Dockerfile. The root .dockerignore admits
+# only a prebuilt ./compiled, and this image builds from source instead.
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+compiled
+**/.env
+**/*.log

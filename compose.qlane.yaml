@@ -1,0 +1,50 @@
+# Testing-only stack for Qlane pull-request sandboxes. It builds n8n from the
+# checked-out source, runs it on SQLite, and creates an owner account.
+# No release uses this file.
+services:
+  n8n:
+    image: n8n-qlane:test # exists in no registry, so the image is always built
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: docker/qlane/Dockerfile
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_PORT: "5678"
+      N8N_EDITOR_BASE_URL: ${QLANE_SANDBOX_PUBLIC_URL:-http://localhost:5678}
+      N8N_WEBHOOK_URL: ${QLANE_SANDBOX_PUBLIC_URL:-http://localhost:5678}/
+      N8N_PROXY_HOPS: "1"
+      # Keep sandboxes out of n8n's telemetry, and skip the first-login survey.
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    healthcheck:
+      # Readiness passes only after the migrations finish.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5678/healthz/readiness').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 180s
+
+  # Creates the owner account once n8n is ready, then exits.
+  seed-owner:
+    image: node:24.18.1-bookworm-slim
+    depends_on:
+      n8n:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      N8N_URL: http://n8n:5678
+      QA_OWNER_EMAIL: qa-owner@example.com
+      QA_OWNER_PASSWORD: ${QA_OWNER_PASSWORD:?set QA_OWNER_PASSWORD on the test target}
+    volumes:
+      - ./docker/qlane/seed-owner.mjs:/seed-owner.mjs:ro
+    command: ["node", "/seed-owner.mjs"]
